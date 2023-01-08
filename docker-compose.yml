@@ -1,26 +1,27 @@
-version: "3.9"
+version: "3"
 services:
   step-ca:
-    image: smallstep/step-ca
+    image: smallstep/step-ca:latest
     networks:
       traefik-net:
         aliases:
-          - "ca.myhost.local"
+          - "ca.opi4.home.arpa"
     ports:
       - 9000:9000
     volumes:
       - ./data/step-ca:/home/step
 
   traefik:
-    image: traefik:v2.4
+    image: traefik:latest
     depends_on:
       - step-ca
     networks:
       traefik-net:
         aliases:
           - "traefik"
-          - "traefik.myhost.local"
-          - "whoami.myhost.local"
+          - "traefik.opi4.home.arpa"
+          - "whoami.opi4.home.arpa"
+          - "odoo.opi4.home.arpa"
     command:
       - "--api.insecure=true"
       - "--api.dashboard=true"
@@ -37,7 +38,7 @@ services:
       - "--certificatesResolvers.myresolver.acme.tlsChallenge=true"
       - "--certificatesResolvers.myresolver.acme.email=admin"
       - "--certificatesResolvers.myresolver.acme.storage=/etc/acme/acme.json"
-      - "--certificatesresolvers.myresolver.acme.caserver=https://ca.myhost.local:9000/acme/acme/directory"
+      - "--certificatesresolvers.myresolver.acme.caserver=https://ca.opi4.home.arpa:9000/acme/acme/directory"
       - "--certificatesResolvers.myresolver.acme.httpChallenge=true"
       - "--certificatesResolvers.myresolver.acme.httpChallenge.entryPoint=web"
     ports:
@@ -50,18 +51,18 @@ services:
       - ./config/traefik.yml:/dynamic-conf.yml
     environment:
       LEGO_CA_CERTIFICATES: "/usr/local/share/ca-certificates/my_root_ca.crt"
-      LEGO_CA_SERVER_NAME: "ca.myhost.local"
+      LEGO_CA_SERVER_NAME: "ca.opi4.home.arpa"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.traefik0.entrypoints=web"
-      - "traefik.http.routers.traefik0.rule=Host(`traefik.myhost.local`)"
+      - "traefik.http.routers.traefik0.rule=Host(`traefik.opi4.home.arpa`)"
       - "traefik.http.services.traefik.loadbalancer.server.port=8080"
 
       - "traefik.http.middlewares.traefik-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.traefik0.middlewares=traefik-redirect"
 
       - "traefik.http.routers.traefik1.entrypoints=websecure"
-      - "traefik.http.routers.traefik1.rule=Host(`traefik.myhost.local`)"
+      - "traefik.http.routers.traefik1.rule=Host(`traefik.opi4.home.arpa`)"
       - "traefik.http.routers.traefik1.tls=true"
       - "traefik.http.routers.traefik1.tls.certresolver=myresolver"
 
@@ -70,18 +71,57 @@ services:
     hostname: "whoami1"
     networks:
       traefik-net:
+        aliases:
+          - "whoami.opi4.home.arpa"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.whoami0.entrypoints=web"
-      - "traefik.http.routers.whoami0.rule=Host(`whoami.myhost.local`)"
+      - "traefik.http.routers.whoami0.rule=Host(`whoami.opi4.home.arpa`)"
 
       - "traefik.http.middlewares.whoami-redirect.redirectscheme.scheme=https"
       - "traefik.http.routers.whoami0.middlewares=whoami-redirect"
 
       - "traefik.http.routers.whoami1.entrypoints=websecure"
-      - "traefik.http.routers.whoami1.rule=Host(`whoami.myhost.local`)"
+      - "traefik.http.routers.whoami1.rule=Host(`whoami.opi4.home.arpa`)"
       - "traefik.http.routers.whoami1.tls=true"
       - "traefik.http.routers.whoami1.tls.certresolver=myresolver"
+
+  db:
+    image: postgres:13
+    networks:
+      traefik-net:
+#    volumes:
+#      - ./odoo-db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD=odoo
+      - POSTGRES_USER=odoo
+
+  odoo:
+    image: doggisbag/odoo:16.0
+    hostname: "odoo"
+    depends_on:
+      - db
+    networks:
+      traefik-net:
+        aliases:
+          - "odoo.opi4.home.arpa"
+    ports:
+      - "8069:8069"
+#    volumes:
+#      - ./odoo-data:/var/lib/odoo
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.odoo0.entrypoints=web"
+      - "traefik.http.routers.odoo0.rule=Host(`odoo.opi4.home.arpa`)"
+
+      - "traefik.http.middlewares.odoo-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.odoo0.middlewares=whoami-redirect"
+
+      - "traefik.http.routers.odoo1.entrypoints=websecure"
+      - "traefik.http.routers.odoo1.rule=Host(`odoo.opi4.home.arpa`)"
+      - "traefik.http.routers.odoo1.tls=true"
+      - "traefik.http.routers.odoo1.tls.certresolver=myresolver"
 
 networks:
   traefik-net:
